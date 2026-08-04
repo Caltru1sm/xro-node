@@ -35,10 +35,27 @@ struct HexTo
 };
 }
 
+// XRO work thresholds.
+//
+// Upstream Nano values were epoch_1 0xffffffc000000000 and epoch_2
+// 0xfffffff800000000. XRO's chain was never produced at those levels: scanning
+// all 592,298 blocks in the live ledger found 403,985 (68%) below epoch_1 and
+// 454,888 (77%) below epoch_2. A bootstrapping node therefore rejected most of
+// the chain with insufficient_work and could never sync, while nodes that
+// already held the ledger were unaffected because they never re-validate.
+//
+// The same scan found exactly one block below 0xfffffe0000000000 - the genesis
+// block, whose work is hardcoded and not work-validated - so this value admits
+// the entire real history and nothing lower is required.
+//
+// This is permissive relative to upstream: it accepts blocks the network already
+// holds rather than invalidating anything, so it does not partition the chain.
+// It does lower the bar for newly published blocks, but the measurement above
+// shows the network has been operating at this level for most of its history.
 nano::work_thresholds const nano::work_thresholds::publish_full (
-0xffffffc000000000,
-0xfffffff800000000, // 8x higher than epoch_1
-0xfffffe0000000000 // 8x lower than epoch_1
+0xfffffe0000000000, // epoch_1: lowered to match XRO's actual chain
+0xfffffe0000000000, // epoch_2: lowered to match XRO's actual chain
+0xfffffe0000000000 // epoch_2_receive: unchanged
 );
 
 nano::work_thresholds const nano::work_thresholds::publish_beta (
