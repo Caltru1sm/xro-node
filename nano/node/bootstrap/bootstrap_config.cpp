@@ -69,6 +69,7 @@ nano::error nano::bootstrap_config::deserialize (nano::tomlconfig & toml)
 	toml.get ("channel_limit", channel_limit);
 	toml.get ("rate_limit", rate_limit);
 	toml.get ("database_rate_limit", database_rate_limit);
+	toml.get ("frontier_rate_limit", frontier_rate_limit);
 	toml.get ("database_warmup_ratio", database_warmup_ratio);
 	toml.get ("max_pull_count", max_pull_count);
 	toml.get_duration ("request_timeout", request_timeout);
@@ -103,6 +104,7 @@ nano::error nano::bootstrap_config::serialize (nano::tomlconfig & toml) const
 	toml.put ("channel_limit", channel_limit, "Maximum number of un-responded requests per channel.\nNote: changing to unlimited (0) is not recommended.\ntype:uint64");
 	toml.put ("rate_limit", rate_limit, "Rate limit on requests.\nNote: changing to unlimited (0) is not recommended as this operation competes for resources with realtime traffic.\ntype:uint64");
 	toml.put ("database_rate_limit", database_rate_limit, "Rate limit on scanning accounts and pending entries from database.\nNote: changing to unlimited (0) is not recommended as this operation competes for resources on querying the database.\ntype:uint64");
+	toml.put ("frontier_rate_limit", frontier_rate_limit, "Rate limit on frontier scan requests.\nFrontier responses are large and are sent whether or not they contain anything new, so on a small network this is the dominant source of bootstrap traffic. Lower it on a synced node; leave it at the default while syncing.\ntype:uint64");
 	toml.put ("database_warmup_ratio", database_warmup_ratio, "Ratio of the database rate limit to use for the initial warmup.\ntype:uint64");
 	toml.put ("max_pull_count", max_pull_count, "Maximum number of requested blocks for bootstrap request.\ntype:uint64");
 	toml.put ("request_timeout", request_timeout.count (), "Timeout in milliseconds for incoming bootstrap messages to be processed.\ntype:milliseconds");
