@@ -29,11 +29,19 @@ ARG COVERAGE=OFF
 ARG CI_TAG=xro-node-2.0.0
 ARG CI_VERSION_PRE_RELEASE=OFF
 
-# ci/build.sh hardcodes `cmake --build --parallel $(nproc)` with no override, and
-# 12 concurrent gcc jobs OOMs a 7 GB machine on rocksdb. nproc honours CPU
-# affinity, so taskset caps it. --cpuset-cpus on `docker build` would not work
-# here: BuildKit ignores it.
-ARG BUILD_CPUS=0-3
+# Parallelism is derived from available memory, not hardcoded.
+#
+# ci/build.sh runs `cmake --build --parallel $(nproc)` with no override, so job
+# count tracks CPU count while the real constraint is RAM - rocksdb translation
+# units are the ones that OOM. Since nproc honours CPU affinity, taskset is the
+# lever (BuildKit ignores --cpuset-cpus on `docker build`).
+#
+# Empirically this tree needs ~1.5 GB per concurrent gcc job: 7 GB sustained 4
+# jobs, 12 GB sustains 8. Deriving it means the build adapts to whatever machine
+# it runs on instead of depending on the builder knowing their own specs.
+# Override with --build-arg BUILD_JOBS=N to pin it.
+ARG BUILD_JOBS=auto
+ARG MB_PER_JOB=1536
 
 COPY ./ci/prepare/linux /tmp/prepare
 RUN /tmp/prepare/prepare.sh
@@ -41,7 +49,18 @@ RUN /tmp/prepare/prepare.sh
 COPY ./ /tmp/src
 WORKDIR /tmp/src
 
-RUN taskset -c ${BUILD_CPUS} ci/build-node.sh
+RUN set -eu; \
+    cores=$(nproc); \
+    if [ "${BUILD_JOBS}" = "auto" ]; then \
+      mem_mb=$(awk '/^MemTotal:/ {printf "%d", $2/1024}' /proc/meminfo); \
+      jobs=$(( mem_mb / ${MB_PER_JOB} )); \
+      [ "$jobs" -lt 1 ] && jobs=1; \
+      [ "$jobs" -gt "$cores" ] && jobs=$cores; \
+    else \
+      jobs=${BUILD_JOBS}; \
+    fi; \
+    echo "build: ${mem_mb:-?} MB RAM, ${cores} cores -> ${jobs} parallel jobs"; \
+    taskset -c 0-$(( jobs - 1 )) ci/build-node.sh
 
 FROM ubuntu:24.04
 

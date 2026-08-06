@@ -24,9 +24,11 @@ public:
 class frontier_scan_config final
 {
 public:
-	// TODO: Serialize & deserialize
+	nano::error deserialize (nano::tomlconfig & toml);
+	nano::error serialize (nano::tomlconfig & toml) const;
 
-	unsigned head_parallelistm{ 128 };
+public:
+	unsigned head_parallelism{ 128 };
 	unsigned consideration_count{ 4 };
 	std::size_t candidates{ 1000 };
 	std::chrono::milliseconds cooldown{ 1000 * 5 };

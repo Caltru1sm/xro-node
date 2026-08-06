@@ -29,6 +29,36 @@ nano::error nano::account_sets_config::serialize (nano::tomlconfig & toml) const
  * bootstrap_config
  */
 
+/*
+ * frontier_scan_config
+ */
+
+nano::error nano::frontier_scan_config::deserialize (nano::tomlconfig & toml)
+{
+	toml.get ("head_parallelism", head_parallelism);
+	toml.get ("consideration_count", consideration_count);
+	toml.get ("candidates", candidates);
+	toml.get_duration ("cooldown", cooldown);
+	toml.get ("max_pending", max_pending);
+
+	return toml.get_error ();
+}
+
+nano::error nano::frontier_scan_config::serialize (nano::tomlconfig & toml) const
+{
+	toml.put ("head_parallelism", head_parallelism, "Number of accounts to process in parallel during frontier scan.\ntype:uint64");
+	toml.put ("consideration_count", consideration_count, "Number of account candidates to consider for frontier scan.\ntype:uint64");
+	toml.put ("candidates", candidates, "Maximum number of candidates for frontier scan.\ntype:uint64");
+	toml.put ("cooldown", cooldown.count (), "Cooldown period between frontier scan operations.\ntype:milliseconds");
+	toml.put ("max_pending", max_pending, "Maximum number of pending requests during frontier scan.\ntype:uint64");
+
+	return toml.get_error ();
+}
+
+/*
+ * bootstrap_config
+ */
+
 nano::error nano::bootstrap_config::deserialize (nano::tomlconfig & toml)
 {
 	toml.get ("enable", enable);
@@ -52,6 +82,12 @@ nano::error nano::bootstrap_config::deserialize (nano::tomlconfig & toml)
 	{
 		auto config_l = toml.get_required_child ("account_sets");
 		account_sets.deserialize (config_l);
+	}
+
+	if (toml.has_key ("frontier_scan"))
+	{
+		auto config_l = toml.get_required_child ("frontier_scan");
+		frontier_scan.deserialize (config_l);
 	}
 
 	return toml.get_error ();
@@ -79,6 +115,10 @@ nano::error nano::bootstrap_config::serialize (nano::tomlconfig & toml) const
 	nano::tomlconfig account_sets_l;
 	account_sets.serialize (account_sets_l);
 	toml.put_child ("account_sets", account_sets_l);
+
+	nano::tomlconfig frontier_scan_l;
+	frontier_scan.serialize (frontier_scan_l);
+	toml.put_child ("frontier_scan", frontier_scan_l);
 
 	return toml.get_error ();
 }

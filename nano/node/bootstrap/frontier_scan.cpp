@@ -9,13 +9,13 @@ nano::bootstrap::frontier_scan::frontier_scan (frontier_scan_config const & conf
 {
 	// Divide nano::account numeric range into consecutive and equal ranges
 	nano::uint256_t max_account = std::numeric_limits<nano::uint256_t>::max ();
-	nano::uint256_t range_size = max_account / config.head_parallelistm;
+	nano::uint256_t range_size = max_account / config.head_parallelism;
 
-	for (unsigned i = 0; i < config.head_parallelistm; ++i)
+	for (unsigned i = 0; i < config.head_parallelism; ++i)
 	{
 		// Start at 1 to avoid the burn account
 		nano::uint256_t start = (i == 0) ? 1 : i * range_size;
-		nano::uint256_t end = (i == config.head_parallelistm - 1) ? max_account : start + range_size;
+		nano::uint256_t end = (i == config.head_parallelism - 1) ? max_account : start + range_size;
 
 		heads.emplace_back (frontier_head{ nano::account{ start }, nano::account{ end } });
 	}
@@ -115,6 +115,18 @@ bool nano::bootstrap::frontier_scan::process (nano::account start, std::deque<st
 			{
 				stats.inc (nano::stat::type::bootstrap_frontier_scan, nano::stat::detail::done_range);
 				entry.next = entry.start;
+
+				// A head that has swept its whole range has nothing further to
+				// discover there, so make it observe the cooldown before sweeping
+				// again. Leaving the timestamp at epoch (as a mid-range advance
+				// does) makes the head re-qualify immediately via the timestamp
+				// check, so the cooldown can never apply and the range is rescanned
+				// back-to-back forever. That is harmless on a large account space,
+				// where a full sweep is slow, but on a small network every range
+				// completes in moments and the scan spins. Mid-range advances still
+				// reset the timestamp so a genuinely syncing node keeps moving
+				// forward at full speed.
+				entry.timestamp = std::chrono::steady_clock::now ();
 			}
 
 			done = true;
