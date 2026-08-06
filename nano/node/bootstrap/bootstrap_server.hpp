@@ -24,6 +24,23 @@ public:
 	size_t max_queue{ 16 };
 	size_t threads{ 1 };
 	size_t batch_size{ 64 };
+
+	// Maximum frontiers returned in a single frontier response, regardless of how
+	// many the requester asked for.
+	//
+	// Requesters always ask for the protocol maximum (1000), and frontier scanning
+	// is a continuous background sweep, so on a small network this is the single
+	// largest source of outbound traffic: a node was measured serving 2,208,059
+	// frontiers in 302s to answer 2,338 requests (~944 each) on a network with only
+	// 8,442 accounts, accounting for ~99% of its egress.
+	//
+	// Capping the response does not slow the requester down - its request rate is
+	// governed by frontier_rate_limit and is unaffected by how much comes back - so
+	// this cuts egress close to proportionally. At 128 a full sweep of an
+	// 8,000-account network still takes well under a hundred responses.
+	//
+	// 0 means "no server-side cap", i.e. honour the request up to the protocol max.
+	size_t max_frontiers_served{ 128 };
 };
 
 /**

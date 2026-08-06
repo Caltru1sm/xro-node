@@ -390,8 +390,18 @@ nano::asc_pull_ack nano::bootstrap_server::process (secure::transaction const & 
 	response.id = id;
 	response.type = nano::asc_pull_type::frontiers;
 
+	// Requesters always ask for the protocol maximum, so honouring `count` verbatim
+	// makes frontier responses the dominant source of outbound traffic. The cap is
+	// ours to choose: the requester's rate is set by its own frontier_rate_limit and
+	// does not rise when responses get smaller.
+	std::size_t limit = request.count;
+	if (config.max_frontiers_served > 0)
+	{
+		limit = std::min (limit, config.max_frontiers_served);
+	}
+
 	nano::asc_pull_ack::frontiers_payload response_payload{};
-	for (auto it = store.account.begin (transaction, request.start), end = store.account.end (transaction); it != end && response_payload.frontiers.size () < request.count; ++it)
+	for (auto it = store.account.begin (transaction, request.start), end = store.account.end (transaction); it != end && response_payload.frontiers.size () < limit; ++it)
 	{
 		response_payload.frontiers.emplace_back (it->first, it->second.head);
 	}
@@ -429,6 +439,7 @@ nano::error nano::bootstrap_server_config::serialize (nano::tomlconfig & toml) c
 	toml.put ("max_queue", max_queue, "Maximum number of queued requests per peer. \ntype:uint64");
 	toml.put ("threads", threads, "Number of threads to process requests. \ntype:uint64");
 	toml.put ("batch_size", batch_size, "Maximum number of requests to process in a single batch. \ntype:uint64");
+	toml.put ("max_frontiers_served", max_frontiers_served, "Maximum frontiers returned in a single frontier response, regardless of how many were requested.\nRequesters always ask for the protocol maximum, so this is the main lever on outbound bootstrap traffic. Lowering it does not slow requesters down, since their request rate is set by their own frontier_rate_limit. 0 disables the cap.\ntype:uint64");
 
 	return toml.get_error ();
 }
@@ -438,6 +449,7 @@ nano::error nano::bootstrap_server_config::deserialize (nano::tomlconfig & toml)
 	toml.get ("max_queue", max_queue);
 	toml.get ("threads", threads);
 	toml.get ("batch_size", batch_size);
+	toml.get ("max_frontiers_served", max_frontiers_served);
 
 	return toml.get_error ();
 }

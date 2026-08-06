@@ -412,6 +412,7 @@ TEST (toml_config, daemon_config_deserialize_defaults)
 	ASSERT_EQ (conf.node.bootstrap_server.max_queue, defaults.node.bootstrap_server.max_queue);
 	ASSERT_EQ (conf.node.bootstrap_server.threads, defaults.node.bootstrap_server.threads);
 	ASSERT_EQ (conf.node.bootstrap_server.batch_size, defaults.node.bootstrap_server.batch_size);
+	ASSERT_EQ (conf.node.bootstrap_server.max_frontiers_served, defaults.node.bootstrap_server.max_frontiers_served);
 
 	ASSERT_EQ (conf.node.request_aggregator.max_queue, defaults.node.request_aggregator.max_queue);
 	ASSERT_EQ (conf.node.request_aggregator.threads, defaults.node.request_aggregator.threads);
@@ -640,6 +641,7 @@ frontier_rate_limit = 999
 	max_queue = 999
 	threads = 999
 	batch_size = 999
+	max_frontiers_served = 999
 
 	[node.request_aggregator]
 	max_queue = 999
@@ -834,6 +836,7 @@ frontier_rate_limit = 999
 	ASSERT_NE (conf.node.bootstrap_server.max_queue, defaults.node.bootstrap_server.max_queue);
 	ASSERT_NE (conf.node.bootstrap_server.threads, defaults.node.bootstrap_server.threads);
 	ASSERT_NE (conf.node.bootstrap_server.batch_size, defaults.node.bootstrap_server.batch_size);
+	ASSERT_NE (conf.node.bootstrap_server.max_frontiers_served, defaults.node.bootstrap_server.max_frontiers_served);
 
 	ASSERT_NE (conf.node.request_aggregator.max_queue, defaults.node.request_aggregator.max_queue);
 	ASSERT_NE (conf.node.request_aggregator.threads, defaults.node.request_aggregator.threads);
