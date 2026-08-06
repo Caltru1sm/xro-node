@@ -118,14 +118,21 @@ bool nano::bootstrap::frontier_scan::process (nano::account start, std::deque<st
 
 				// A head that has swept its whole range has nothing further to
 				// discover there, so make it observe the cooldown before sweeping
-				// again. Leaving the timestamp at epoch (as a mid-range advance
-				// does) makes the head re-qualify immediately via the timestamp
-				// check, so the cooldown can never apply and the range is rescanned
-				// back-to-back forever. That is harmless on a large account space,
-				// where a full sweep is slow, but on a small network every range
-				// completes in moments and the scan spins. Mid-range advances still
-				// reset the timestamp so a genuinely syncing node keeps moving
-				// forward at full speed.
+				// again.
+				//
+				// The reset above puts `requests` back to 0, and next() admits a
+				// head whose `requests < consideration_count` *without consulting
+				// the timestamp at all*. A wrapped head therefore re-qualifies
+				// immediately through that branch and the cooldown is unreachable -
+				// measured on XRO as 19,824 selections by_requests against 44
+				// by_timestamp. Holding `requests` at the consideration count forces
+				// this head down the timestamp branch instead, which is the one the
+				// cooldown actually gates.
+				//
+				// Mid-range advances are untouched: they still reset `requests` to 0
+				// and sweep at full speed, so a genuinely syncing node is unaffected.
+				// Only a head with nothing left to find slows down.
+				entry.requests = config.consideration_count;
 				entry.timestamp = std::chrono::steady_clock::now ();
 			}
 
