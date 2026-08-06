@@ -47,6 +47,26 @@ else
   echo "init: config-node.toml exists, left untouched"
 fi
 
+# Point the node at XRO's peering host.
+#
+# `peering` has been passed in the compose file since the original image, but
+# nothing ever read it - neither upstream's init.sh nor this one. Without it the
+# node falls back to nodeconfig.cpp's default_live_peer_network, which is
+# "peering.nano.org": Nano's mainnet seed. A node with no cached peer database
+# therefore has no way to find the XRO network at all. It opens connections to
+# Nano nodes, fails the handshake against a different genesis, and sits at zero
+# realtime peers indefinitely.
+#
+# NANO_DEFAULT_PEER feeds default_live_peer_network directly, so this works for
+# existing installs too, not only ones where config-node.toml is generated fresh.
+# An explicit preconfigured_peers list in config-node.toml still overrides it.
+if [ -n "${peering:-}" ]; then
+  export NANO_DEFAULT_PEER="${peering}"
+  echo "init: peering host ${peering}"
+else
+  echo "init: WARNING no 'peering' set - falling back to ${NANO_DEFAULT_PEER:-peering.nano.org}, which is not XRO"
+fi
+
 if [ ! -f config-rpc.toml ]; then
   cat > config-rpc.toml <<EOF
 port=${RPC_PORT}
