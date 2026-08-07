@@ -53,6 +53,18 @@ public:
 	std::size_t rate_limit{ 500 };
 	std::size_t database_rate_limit{ 250 };
 	std::size_t frontier_rate_limit{ 8 };
+	// Frontiers to ask for per frontier request. The protocol maximum is 1000 and
+	// that is what was requested unconditionally, which is why inbound bootstrap
+	// traffic was dominated by frontier responses: ~944 entries per reply on a
+	// network with only ~8,400 accounts.
+	//
+	// This is the inbound counterpart to bootstrap_server's max_frontiers_served,
+	// and it is the more useful of the two for an operator acting alone: servers
+	// honour `count`, so lowering it shrinks the replies we receive from *every*
+	// peer, including ones that never upgrade.
+	//
+	// Clamped to the protocol maximum; 0 is invalid and falls back to the default.
+	std::size_t frontier_request_count{ 128 };
 	std::size_t database_warmup_ratio{ 10 };
 	std::size_t max_pull_count{ nano::bootstrap_server::max_blocks };
 	std::chrono::milliseconds request_timeout{ 1000 * 15 };

@@ -16,6 +16,8 @@
 #include <nano/store/component.hpp>
 #include <nano/store/confirmation_height.hpp>
 
+#include <algorithm>
+
 using namespace std::chrono_literals;
 
 nano::bootstrap_service::bootstrap_service (nano::node_config const & node_config_a, nano::block_processor & block_processor_a, nano::ledger & ledger_a, nano::network & network_a, nano::stats & stat_a, nano::logger & logger_a) :
@@ -191,7 +193,13 @@ bool nano::bootstrap_service::send (std::shared_ptr<nano::transport::channel> co
 
 			nano::asc_pull_req::frontiers_payload pld;
 			pld.start = tag.start.as_account ();
-			pld.count = nano::asc_pull_ack::frontiers_payload::max_frontiers;
+			// Ask for what we configured rather than the protocol maximum. Servers
+			// honour `count`, so this shrinks replies from every peer regardless of
+			// what version they run.
+			pld.count = static_cast<decltype (pld.count)> (std::clamp<std::size_t> (
+			config.frontier_request_count > 0 ? config.frontier_request_count : 1,
+			1,
+			nano::asc_pull_ack::frontiers_payload::max_frontiers));
 			request.payload = pld;
 		}
 		break;

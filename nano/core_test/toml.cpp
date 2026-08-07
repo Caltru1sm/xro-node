@@ -401,6 +401,7 @@ TEST (toml_config, daemon_config_deserialize_defaults)
 	ASSERT_EQ (conf.node.bootstrap.channel_limit, defaults.node.bootstrap.channel_limit);
 	ASSERT_EQ (conf.node.bootstrap.database_rate_limit, defaults.node.bootstrap.database_rate_limit);
 	ASSERT_EQ (conf.node.bootstrap.frontier_rate_limit, defaults.node.bootstrap.frontier_rate_limit);
+	ASSERT_EQ (conf.node.bootstrap.frontier_request_count, defaults.node.bootstrap.frontier_request_count);
 	ASSERT_EQ (conf.node.bootstrap.database_warmup_ratio, defaults.node.bootstrap.database_warmup_ratio);
 	ASSERT_EQ (conf.node.bootstrap.max_pull_count, defaults.node.bootstrap.max_pull_count);
 	ASSERT_EQ (conf.node.bootstrap.request_timeout, defaults.node.bootstrap.request_timeout);
@@ -629,6 +630,7 @@ TEST (toml_config, daemon_config_deserialize_no_defaults)
 	channel_limit = 999
 	database_rate_limit = 999
 frontier_rate_limit = 999
+frontier_request_count = 999
 	database_warmup_ratio = 999
 	max_pull_count = 999
 	request_timeout = 999
@@ -825,6 +827,7 @@ frontier_rate_limit = 999
 	ASSERT_NE (conf.node.bootstrap.channel_limit, defaults.node.bootstrap.channel_limit);
 	ASSERT_NE (conf.node.bootstrap.database_rate_limit, defaults.node.bootstrap.database_rate_limit);
 	ASSERT_NE (conf.node.bootstrap.frontier_rate_limit, defaults.node.bootstrap.frontier_rate_limit);
+	ASSERT_NE (conf.node.bootstrap.frontier_request_count, defaults.node.bootstrap.frontier_request_count);
 	ASSERT_NE (conf.node.bootstrap.database_warmup_ratio, defaults.node.bootstrap.database_warmup_ratio);
 	ASSERT_NE (conf.node.bootstrap.max_pull_count, defaults.node.bootstrap.max_pull_count);
 	ASSERT_NE (conf.node.bootstrap.request_timeout, defaults.node.bootstrap.request_timeout);
