@@ -82,6 +82,40 @@ void nano::bootstrap::account_sets::priority_down (nano::account const & account
 	}
 }
 
+void nano::bootstrap::account_sets::priority_raise (nano::account const & account, double priority)
+{
+	if (account.is_zero ())
+	{
+		return;
+	}
+
+	if (blocked (account))
+	{
+		stats.inc (nano::stat::type::bootstrap_account_sets, nano::stat::detail::prioritize_failed);
+		return;
+	}
+
+	if (auto it = priorities.get<tag_account> ().find (account); it != priorities.get<tag_account> ().end ())
+	{
+		// Only ever raise. An account already above this priority is being handled for
+		// a better reason than ours.
+		if (it->priority < priority)
+		{
+			stats.inc (nano::stat::type::bootstrap_account_sets, nano::stat::detail::prioritize);
+			priorities.get<tag_account> ().modify (it, [priority] (auto & val) {
+				val.priority = priority;
+				val.fails = 0;
+			});
+		}
+	}
+	else
+	{
+		stats.inc (nano::stat::type::bootstrap_account_sets, nano::stat::detail::priority_insert);
+		priorities.get<tag_account> ().insert ({ account, priority });
+		trim_overflow ();
+	}
+}
+
 void nano::bootstrap::account_sets::priority_set (nano::account const & account, double priority)
 {
 	if (account.is_zero ())
@@ -288,11 +322,27 @@ void nano::bootstrap::account_sets::sync_dependencies ()
 			break;
 		}
 
-		if (!blocked (entry.dependency_account) && !prioritized (entry.dependency_account))
+		if (blocked (entry.dependency_account))
 		{
-			stats.inc (nano::stat::type::bootstrap_account_sets, nano::stat::detail::dependency_synced);
-			priority_set (entry.dependency_account);
+			// Genuinely cannot help yet: this account is itself waiting on a source
+			// block, and only resolves once something further up the chain does.
+			continue;
 		}
+
+		// Fetchable now, and we know exactly why we want it - something is blocked
+		// waiting on a block this account owns.
+		//
+		// This previously also skipped accounts already present in the priority set,
+		// on the assumption that presence meant they were being handled. That is false
+		// once the set is saturated: an entry sitting at the bottom of ~94,000
+		// speculative accounts is ignored, not handled, and the blocked chain never
+		// unwinds. Measured on a stalled node, dependency_synced was 0 for an entire
+		// run while 88 accounts sat blocked.
+		//
+		// priority_raise promotes an existing entry; priority_set cannot, since it
+		// only inserts when the account is absent.
+		stats.inc (nano::stat::type::bootstrap_account_sets, nano::stat::detail::dependency_synced);
+		priority_raise (entry.dependency_account, priority_max);
 	}
 
 	trim_overflow ();
