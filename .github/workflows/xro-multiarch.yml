@@ -111,17 +111,28 @@ jobs:
           # accepts it. Asserting on the address prefix rather than the exit
           # code, because a node that silently fell back to Nano's genesis
           # would also exit 0 here.
-          docker run --rm --entrypoint /bin/sh "$IMG" -c \
-            'printenv prefix account source work signature name peering peering_port' \
-            | tee /dev/stderr | grep -qx 'xro_'
+          identity=$(docker run --rm --entrypoint /bin/sh "$IMG" -c \
+            'printenv prefix account source work signature name peering peering_port')
+          echo "$identity"
+          grep -qx 'xro_' <<<"$identity"
 
           # The preflight rejects a bad override. If this stops failing, the
           # guard has silently stopped guarding.
-          if docker run --rm -e source=E89208DD038FBB269987689621D52292AE9C35941A7484756ECCED92A65093BA \
-               "$IMG" 2>&1 | grep -q "XRO STARTUP ABORTED"; then
-            echo "preflight correctly rejected Nano mainnet genesis"
+          #
+          # Output is captured before being matched rather than piped into
+          # grep. Under `set -o pipefail` a pipeline reports the last non-zero
+          # status in it, so `docker run ... | grep -q` returns the guard's own
+          # exit 78 even when grep matches - i.e. the guard working correctly
+          # would fail this check. Capturing separates "what did it print" from
+          # "how did it exit" so both can be asserted independently.
+          out=$(docker run --rm \
+                  -e source=E89208DD038FBB269987689621D52292AE9C35941A7484756ECCED92A65093BA \
+                  "$IMG" 2>&1) && rc=0 || rc=$?
+          echo "$out"
+          if [ "$rc" -eq 78 ] && grep -q "XRO STARTUP ABORTED" <<<"$out"; then
+            echo "preflight correctly rejected Nano mainnet genesis (exit 78)"
           else
-            echo "PREFLIGHT DID NOT FIRE on Nano mainnet genesis" >&2
+            echo "PREFLIGHT DID NOT FIRE on Nano mainnet genesis (exit ${rc})" >&2
             exit 1
           fi
 
