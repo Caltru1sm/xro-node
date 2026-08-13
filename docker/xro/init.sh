@@ -17,6 +17,62 @@
 
 set -euo pipefail
 
+# ---------------------------------------------------------------------------
+# Network identity preflight.
+#
+# The image bakes all ten of these, so in the normal case this block is a
+# no-op that prints a summary. It earns its place when someone overrides one:
+# every variable here has a fallback, and every fallback is Nano's rather than
+# XRO's. Getting one wrong does not crash the node - it produces a node that
+# boots cleanly onto the wrong network and reports zero peers, which is a much
+# more expensive thing to debug than an abort at startup.
+#
+# Exits 78 (EX_CONFIG) so the cause is unambiguous in `docker inspect`.
+# ---------------------------------------------------------------------------
+NANO_GENESIS_SOURCE="E89208DD038FBB269987689621D52292AE9C35941A7484756ECCED92A65093BA"
+NANO_GENESIS_ACCOUNT="nano_3t6k35gi95xu6tergt6p69ck76ogmitsa8mnijtpxm9fkcm736xtoncuohr3"
+
+die() {
+  echo "=============================================================" >&2
+  echo "XRO STARTUP ABORTED" >&2
+  echo "  $1" >&2
+  echo "" >&2
+  echo "  This image ships correct XRO defaults for every network" >&2
+  echo "  variable. If you are passing -e or an env_file, remove the" >&2
+  echo "  override or correct it. Starting anyway would put this node" >&2
+  echo "  on the wrong network." >&2
+  echo "=============================================================" >&2
+  exit 78
+}
+
+for v in prefix source account work signature name peering peering_port RPC_PORT WS_PORT; do
+  eval "val=\${${v}:-}"
+  [ -n "$val" ] || die "'${v}' is empty or unset (overridden to nothing?)"
+done
+
+[ "${source}" != "${NANO_GENESIS_SOURCE}" ] || die "'source' is Nano mainnet's genesis, not XRO's"
+[ "${account}" != "${NANO_GENESIS_ACCOUNT}" ] || die "'account' is Nano mainnet's genesis, not XRO's"
+[ "${peering}" != "peering.nano.org" ] || die "'peering' points at Nano's seed host, not XRO's"
+
+case "${prefix}" in
+  *_) : ;;
+  *) echo "init: WARNING prefix '${prefix}' does not end in an underscore" >&2 ;;
+esac
+
+# A ledger written under one 'name' is invisible under another - the node just
+# starts an empty resync into the new directory. Catch the rename rather than
+# letting it look like data loss.
+for existing in /root/*/data.ldb; do
+  [ -e "$existing" ] || continue
+  found="$(basename "$(dirname "$existing")")"
+  [ "$found" = "${name}" ] || echo "init: WARNING found an existing ledger in /root/${found} but 'name' is '${name}' - the node will ignore it and sync from scratch" >&2
+done
+
+echo "init: XRO network identity OK"
+echo "init:   prefix ${prefix} / account ${account}"
+echo "init:   data dir /root/${name} / peering ${peering}:${peering_port}"
+echo "init:   arch $(uname -m)"
+
 dir="/root/${name}"
 mkdir -p "$dir"
 cd "$dir"
