@@ -1,0 +1,161 @@
+# Builds the XRO node natively on amd64 and arm64, then stitches a manifest so
+# `docker pull caltru1sm/xro-node:TAG` resolves correctly on a ZimaBoard, a
+# Raspberry Pi 4/5, an Oracle Ampere A1, or Graviton.
+#
+# Native arm64 runners are the point. Emulated aarch64 builds of this tree
+# (Boost + RocksDB + CryptoPP from source) take hours and intermittently
+# segfault inside qemu-user-static; native arm64 completes in roughly the same
+# time as amd64.
+#
+# Builds docker/xro/Dockerfile - the XRO image, which compiles from source and
+# bakes the network identity. Not docker/node/Dockerfile, which is upstream's.
+#
+# Required repository secrets:
+#   DOCKERHUB_USERNAME
+#   DOCKERHUB_TOKEN      (access token, not the account password)
+
+name: Build XRO node (multi-arch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (e.g. 2.0.1)"
+        required: true
+        default: "xro-dev"
+      latest:
+        description: "Also move :latest to this build"
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "xro-node-*"
+
+env:
+  IMAGE: caltru1sm/xro-node
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      # Submodules are mandatory: Boost is vendored as the full boostorg
+      # superproject with nested submodules, and a non-recursive checkout fails
+      # at CMake configure with a misleading Boost_INCLUDE_DIR error.
+      - name: Check out with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          df -h
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Resolve tag
+        id: meta
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.suffix }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/xro/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          provenance: false
+          tags: ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}-${{ matrix.suffix }}
+          # CI_TAG is a display string only (node_vendor / --version). The
+          # wire-visible version peers compare stays at CMakeLists' 28.0.0.
+          #
+          # NANO_SIMD_OPTIMIZATIONS is deliberately absent: ci/build.sh never
+          # passes it and its CMake default is OFF, so aarch64 already compiles
+          # -march=armv8-a. That baseline is what a published image wants - the
+          # +crc+crypto path is faster but can SIGILL on older ARMv8 cores.
+          build-args: |
+            CI_TAG=${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=xro-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=xro-${{ matrix.suffix }}
+
+      - name: Smoke test ${{ matrix.suffix }}
+        run: |
+          set -euxo pipefail
+          IMG=${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}-${{ matrix.suffix }}
+
+          # The binary runs at all on this architecture. Catches a SIGILL from
+          # an over-tuned -march before it reaches anyone's Pi.
+          docker run --rm --entrypoint /bin/nan_node "$IMG" --version
+
+          # The baked identity survived into the image and the preflight
+          # accepts it. Asserting on the address prefix rather than the exit
+          # code, because a node that silently fell back to Nano's genesis
+          # would also exit 0 here.
+          docker run --rm --entrypoint /bin/sh "$IMG" -c \
+            'printenv prefix account source work signature name peering peering_port' \
+            | tee /dev/stderr | grep -qx 'xro_'
+
+          # The preflight rejects a bad override. If this stops failing, the
+          # guard has silently stopped guarding.
+          if docker run --rm -e source=E89208DD038FBB269987689621D52292AE9C35941A7484756ECCED92A65093BA \
+               "$IMG" 2>&1 | grep -q "XRO STARTUP ABORTED"; then
+            echo "preflight correctly rejected Nano mainnet genesis"
+          else
+            echo "PREFLIGHT DID NOT FIRE on Nano mainnet genesis" >&2
+            exit 1
+          fi
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Resolve tag
+        id: meta
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      # Per-architecture tags are pushed first and the manifest is created last,
+      # so the tag production pulls is never in a half-updated state.
+      - name: Create and push manifest
+        run: |
+          set -eux
+          TAG=${{ steps.meta.outputs.tag }}
+          docker buildx imagetools create -t ${{ env.IMAGE }}:${TAG} \
+            ${{ env.IMAGE }}:${TAG}-amd64 \
+            ${{ env.IMAGE }}:${TAG}-arm64
+          docker buildx imagetools inspect ${{ env.IMAGE }}:${TAG}
+
+      - name: Move :latest
+        if: github.event.inputs.latest == 'true' || startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -eux
+          TAG=${{ steps.meta.outputs.tag }}
+          docker buildx imagetools create -t ${{ env.IMAGE }}:latest \
+            ${{ env.IMAGE }}:${TAG}-amd64 \
+            ${{ env.IMAGE }}:${TAG}-arm64
+          docker buildx imagetools inspect ${{ env.IMAGE }}:latest

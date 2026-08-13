@@ -72,5 +72,57 @@ COPY --from=builder /tmp/src/build/nano_node /bin/nan_node
 COPY docker/xro/init.sh /usr/local/bin/init.sh
 RUN chmod +x /bin/nan_node /usr/local/bin/init.sh
 
+# =============================================================================
+# XRO NETWORK IDENTITY - baked defaults
+#
+# Ten variables. Eight are read directly by the node at runtime, two by init.sh:
+#
+#   prefix        nano/lib/numbers.cpp:77    address encode AND decode
+#   source        nano/secure/common.cpp:46  genesis source pubkey
+#   account       nano/secure/common.cpp:58  genesis account + representative
+#   work          nano/secure/common.cpp:70  genesis work
+#   signature     nano/secure/common.cpp:82  genesis signature
+#   name          nano/secure/utility.cpp:29 data directory under /root
+#   peering       nano/node/nodeconfig.cpp:22 seed host for peer discovery
+#   peering_port  nano/lib/constants.hpp:100 P2P listen port
+#   RPC_PORT      docker/xro/init.sh         written into config-rpc.toml
+#   WS_PORT       docker/xro/init.sh         written into config-node.toml
+#
+# WHY THESE ARE BAKED
+# -------------------
+# Every one of them has a fallback, and every fallback is Nano's, not XRO's:
+# genesis defaults to Nano mainnet's, `prefix` to nano_/xrb_, `name` to "Nano",
+# `peering` to peering.nano.org, `peering_port` to 7075. A node started without
+# them does not fail - it comes up clean on the wrong network, finds no peers,
+# and presents as a bootstrap fault. Requiring ten exact `-e` flags made that
+# the single most common way a new peer got it wrong.
+#
+# Baked, `docker run -v <dir>:/root -p 8075:8075 caltru1sm/xro-node` is a
+# correct XRO node with no flags at all.
+#
+# These are DEFAULTS. Anything passed via -e or env_file still wins, so the
+# existing amd64 deployment - which sets all ten explicitly - is unaffected.
+# init.sh re-validates whatever ends up in effect.
+# =============================================================================
+ENV prefix="xro_"
+ENV account="xro_3oh6tp9b8y65w1fzp3aaxgebptkdhnrziiqaairqfhzkcntiwn1r97cgzikp"
+ENV source="D5E4D58E937883E01BFB0508EB989B6A4B7D31F842E8443176BFF255350E5018"
+ENV work="9da7e03b2a2ec54b"
+ENV signature="FBB7588466EAA76196181C3CDF249178BAC70929E28AABBD5DE284362A34899AB4C972A232824067F439E89F2672B792105D3A55763B852FD21967EC7957260D"
+ENV name="RaiblocksOne"
+ENV peering="peering.raione.cc"
+ENV peering_port="8075"
+ENV RPC_PORT="8076"
+ENV WS_PORT="8078"
+
 WORKDIR /root
+
+# 8075 is the only port that needs to reach the internet. 8076 (RPC) and 8078
+# (websocket) bind loopback inside the container by default - see init.sh.
+EXPOSE 8075
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=300s --retries=3 \
+  CMD curl -fsS -m 8 -d '{"action":"block_count"}' \
+      "http://127.0.0.1:${RPC_PORT}" >/dev/null || exit 1
+
 ENTRYPOINT ["/usr/local/bin/init.sh"]
