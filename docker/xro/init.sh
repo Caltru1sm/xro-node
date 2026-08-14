@@ -12,8 +12,22 @@
 #     with address "::ffff:0.0.0.0" and enable_control = true whenever the file
 #     was absent. On a node holding a wallet that is a wallet-drain default: lose
 #     the TOML in a restore and the node silently comes back with a
-#     control-enabled RPC on every interface. Defaults here are loopback with
-#     control disabled; a wider bind must be opted into explicitly via RPC_BIND.
+#     control-enabled RPC on every interface. enable_control defaults to false
+#     here, which is the half of that pair that actually matters.
+#
+#     The bind address is NOT the lever it looks like. Under bridge networking
+#     the RPC has to accept a connection arriving from the bridge, because that
+#     is where docker-proxy connects from when forwarding a published port.
+#     Binding the container's loopback does not narrow exposure - it disables
+#     the RPC entirely, and published ports forward into nothing. That was the
+#     default until 2.0.1, which is why `curl 127.0.0.1:8076` as documented in
+#     DEPLOY.md failed for every operator on bridge networking; it went
+#     unnoticed because the production node runs network_mode: host, where the
+#     container's loopback and the host's are the same interface.
+#
+#     Exposure is controlled at the publish layer instead: `-p 127.0.0.1:8076`
+#     binds the host's loopback, so the port is unreachable off-box no matter
+#     what the container binds.
 
 set -euo pipefail
 
@@ -77,10 +91,15 @@ dir="/root/${name}"
 mkdir -p "$dir"
 cd "$dir"
 
-# Safe defaults; override explicitly in compose when a wider bind is intended
-# (e.g. RPC_BIND=::ffff:172.17.0.1 to reach the node from a reverse proxy).
-RPC_BIND="${RPC_BIND:-::ffff:127.0.0.1}"
-WS_BIND="${WS_BIND:-::ffff:127.0.0.1}"
+# Bind inside the container, so a published port actually reaches the RPC.
+# Keep exposure controlled where it belongs - `-p 127.0.0.1:8076:8076` on the
+# host - rather than here, where a narrow bind silently breaks the RPC instead
+# of protecting it. See the note at the top of this file.
+#
+# ENABLE_CONTROL is the setting with teeth and stays false: control-level RPC
+# can move funds, and no bind address makes that safe to default on.
+RPC_BIND="${RPC_BIND:-::ffff:0.0.0.0}"
+WS_BIND="${WS_BIND:-::ffff:0.0.0.0}"
 ENABLE_CONTROL="${ENABLE_CONTROL:-false}"
 
 if [ ! -f config-node.toml ]; then
@@ -132,6 +151,24 @@ EOF
   echo "init: generated config-rpc.toml (bind ${RPC_BIND}, enable_control ${ENABLE_CONTROL})"
 else
   echo "init: config-rpc.toml exists, left untouched"
+fi
+
+# An existing config-rpc.toml is never rewritten, so a node created before
+# 2.0.1 keeps the old container-loopback bind and its published RPC port stays
+# dead however many times it is upgraded. Say so plainly, with the fix, rather
+# than leaving the operator to rediscover it through a connection reset.
+#
+# Warned unconditionally rather than only under bridge networking. Detecting
+# the network mode from inside the container is unreliable - iproute2 is not
+# installed in this image - and a check that silently never fires is worse than
+# a line of output someone on network_mode: host can ignore.
+if grep -qE '^address *= *"(::ffff:)?127\.0\.0\.1"' config-rpc.toml 2>/dev/null; then
+  echo "init: WARNING config-rpc.toml binds the container's loopback (127.0.0.1)." >&2
+  echo "init:   Under bridge networking a published -p ...:8076 port forwards into" >&2
+  echo "init:   nothing, and RPC appears dead with a connection reset. Ignore this" >&2
+  echo "init:   if you run network_mode: host. Otherwise, from the host:" >&2
+  echo "init:     docker exec <container> sed -i 's|^address = .*|address = \"::ffff:0.0.0.0\"|' /root/${name}/config-rpc.toml" >&2
+  echo "init:   then restart. Exposure stays controlled by -p 127.0.0.1:8076:8076." >&2
 fi
 
 exec nan_node --daemon
