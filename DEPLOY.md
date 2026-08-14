@@ -108,6 +108,21 @@ someone else's, or you'll both be on the network as the same node.
 
 ## If it goes wrong
 
+**`curl: (56) Recv failure: Connection reset by peer` on port 8076** — your node was
+created before 2.0.1, when the RPC was generated bound to the container's own loopback.
+A published port can't reach that, so the RPC looks dead while the node is actually fine.
+Upgrading won't fix it on its own: `config-rpc.toml` is written once and never rewritten,
+so the old bind survives every upgrade. Repair it in place, then restart:
+
+```
+docker exec xro sed -i 's|^address = .*|address = "::ffff:0.0.0.0"|' /root/RaiblocksOne/config-rpc.toml
+docker restart xro
+```
+
+2.0.1 and later print a warning at startup when they detect this. The node stays private
+either way — `-p 127.0.0.1:8076:8076` binds your machine's loopback, so nothing off-box
+can reach the RPC regardless of what the container binds. Keep that `127.0.0.1:` prefix.
+
 **`name: unbound variable`** — you left out one of the `-e` values. They're all required.
 
 **No peers after a few minutes** — check port 8075 is actually forwarded and open.

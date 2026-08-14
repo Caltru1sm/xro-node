@@ -1,0 +1,63 @@
+# XRO node - any architecture.
+#
+# The tag is a multi-arch manifest, so this one file works unchanged on an
+# amd64 box, a Raspberry Pi 4/5, an Oracle Ampere A1, or AWS Graviton. Docker
+# resolves the right architecture on pull.
+#
+# There is nothing to fill in. The image bakes XRO's network identity, so the
+# only line you might touch is the volume path.
+#
+#   mkdir -p ./data
+#   docker compose up -d
+#   docker compose logs -f
+#
+# A fresh node syncs in roughly 45 minutes unattended. To skip the wait, drop a
+# snapshot at ./data/RaiblocksOne/data.ldb before first start - see DEPLOY.md.
+# The snapshot is only portable between machines with the same page size
+# (`getconf PAGESIZE`); Raspberry Pi OS on a Pi 5 / CM5 defaults to 16384 while
+# most everything else is 4096, and LMDB refuses a mismatch.
+
+services:
+  xro:
+    image: caltru1sm/xro-node:latest
+    container_name: xro
+    restart: unless-stopped
+
+    ports:
+      # P2P. Must be reachable from the internet - forward it in your router.
+      # This is the only port that should be publicly exposed.
+      - "0.0.0.0:8075:8075"
+      # RPC and websocket. The 127.0.0.1 prefix is what keeps these private -
+      # it binds the host's loopback, so nothing off-box can reach them.
+      #
+      # This is the only layer that can do that job. Inside the container the
+      # RPC binds 0.0.0.0, and it has to: docker-proxy connects from the bridge
+      # when forwarding a published port, so a container-loopback bind forwards
+      # into nothing and the RPC appears dead. That was the pre-2.0.1 default,
+      # and it is why the DEPLOY.md progress check never worked on bridge
+      # networking.
+      #
+      # Dropping the 127.0.0.1 prefix here publishes RPC to the internet.
+      - "127.0.0.1:8076:8076"
+      - "127.0.0.1:8078:8078"
+
+    volumes:
+      # The ledger lands in ./data/RaiblocksOne/ - the subdirectory comes from
+      # the baked `name`. Change the host side freely; leave :/root alone.
+      - ./data:/root
+
+    # A Pi 4/5 (4 GB) or an Ampere A1 handles this comfortably. The cap exists
+    # so that a bootstrap-load memory spike cannot take the whole box down with
+    # it. mem_limit rather than deploy.resources - it applies without swarm.
+    #
+    # On Raspberry Pi hardware this is silently ignored unless the memory
+    # cgroup is enabled; check with `docker info | grep -i "no memory limit"`
+    # and if it warns, append `cgroup_enable=memory cgroup_memory=1` to
+    # /boot/firmware/cmdline.txt (one single line) and reboot.
+    mem_limit: 3g
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
