@@ -43,8 +43,14 @@ ARG CI_VERSION_PRE_RELEASE=OFF
 ARG BUILD_JOBS=auto
 ARG MB_PER_JOB=1536
 
+# Skip Qt, valgrind and the X stack. This image builds nano_node and nano_rpc
+# only, never the wallet, and ci/build.sh passes -DNANO_GUI=OFF - so none of it
+# is ever looked for, it is just apt download time. Set to false to restore the
+# full dependency set.
+ARG NANO_BUILD_MINIMAL=true
+
 COPY ./ci/prepare/linux /tmp/prepare
-RUN /tmp/prepare/prepare.sh
+RUN NANO_BUILD_MINIMAL=${NANO_BUILD_MINIMAL} /tmp/prepare/prepare.sh
 
 COPY ./ /tmp/src
 WORKDIR /tmp/src
