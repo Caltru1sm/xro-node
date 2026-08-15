@@ -24,7 +24,19 @@ unattended. No snapshot needed.
 mkdir -p /data/nodes/xro
 ```
 
-Anywhere is fine. Whatever you pick goes in the `-v` line below.
+Whatever you pick goes in the `-v` line below. Pick something on ordinary
+writable storage, and check it is before you commit to it:
+
+```
+df -h /data/nodes/xro
+```
+
+On an immutable-root system — ZimaOS, Fedora Silverblue, Talos — `/` is mounted
+read-only and this path is the wrong choice twice over. Docker can't create it,
+so the container never starts; and on the ones that do let it through, `/data`
+often sits on an overlay that an OS update resets, taking the ledger with it and
+resyncing from genesis with no warning. Use the box's persistent volume instead
+— on ZimaOS that's `/DATA`, so `/DATA/AppData/xro/data`.
 
 ## 2. Start it
 
@@ -122,6 +134,19 @@ docker restart xro
 2.0.1 and later print a warning at startup when they detect this. The node stays private
 either way — `-p 127.0.0.1:8076:8076` binds your machine's loopback, so nothing off-box
 can reach the RPC regardless of what the container binds. Keep that `127.0.0.1:` prefix.
+
+**Container sits in `Created` and `docker logs xro` is empty** — it never ran, so there
+is nothing to log and the image is not the problem. The reason is on the container
+object, not in the logs:
+
+```
+docker inspect xro --format '{{.State.Error}}'
+```
+
+`mkdir /data: read-only file system` means the ledger path is on a read-only root.
+Move the `-v` to persistent storage (see step 1), then `docker rm xro` and recreate it.
+A container that fails this way alongside a healthy-looking restart loop from some
+other container is easy to misread as an image fault — check `.State.Error` first.
 
 **`name: unbound variable`** — you left out one of the `-e` values. They're all required.
 

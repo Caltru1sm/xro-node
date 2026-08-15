@@ -43,7 +43,15 @@ services:
 
     volumes:
       # The ledger lands in ./data/RaiblocksOne/ - the subdirectory comes from
-      # the baked `name`. Change the host side freely; leave :/root alone.
+      # the baked `name`. Leave :/root alone; the host side can move, but it
+      # must land on persistent writable storage.
+      #
+      # On an immutable-root system (ZimaOS, Silverblue, Talos) `/` is read-only
+      # squashfs: a bind mount there either fails at create with `mkdir: read-only
+      # file system`, leaving the container stuck in `Created`, or lands on an
+      # overlay that the next OS update resets - which silently destroys the
+      # ledger and resyncs from genesis. Put the compose file inside the box's
+      # persistent volume and keep this relative: /DATA/AppData/xro on ZimaOS.
       - ./data:/root
 
     # A Pi 4/5 (4 GB) or an Ampere A1 handles this comfortably. The cap exists
