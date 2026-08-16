@@ -136,6 +136,16 @@ jobs:
             exit 1
           fi
 
+      # The healthcheck probes the bind in config-rpc.toml rather than assuming
+      # loopback. Asserted here because the failure is invisible to every other
+      # check in this workflow: the node runs correctly and only the health flag
+      # is wrong, so a build can go green while the image reports a perfectly
+      # healthy node as dead. See docker/xro/test-healthcheck.sh.
+      - name: Healthcheck smoke test ${{ matrix.suffix }}
+        run: |
+          docker/xro/test-healthcheck.sh \
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}-${{ matrix.suffix }}
+
   manifest:
     needs: build
     runs-on: ubuntu-24.04
