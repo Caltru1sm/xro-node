@@ -76,7 +76,8 @@ RUN apt-get update -y \
 
 COPY --from=builder /tmp/src/build/nano_node /bin/nan_node
 COPY docker/xro/init.sh /usr/local/bin/init.sh
-RUN chmod +x /bin/nan_node /usr/local/bin/init.sh
+COPY docker/xro/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /bin/nan_node /usr/local/bin/init.sh /usr/local/bin/healthcheck.sh
 
 # =============================================================================
 # XRO NETWORK IDENTITY - baked defaults
@@ -127,8 +128,11 @@ WORKDIR /root
 # (websocket) bind loopback inside the container by default - see init.sh.
 EXPOSE 8075
 
+# Probes the address in config-rpc.toml, not a hardcoded loopback - a node that
+# binds one specific interface (the correct thing to do under network_mode:
+# host, where nothing else keeps the RPC off the LAN) is healthy, and a probe
+# aimed at 127.0.0.1 would call it dead. See docker/xro/healthcheck.sh.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=300s --retries=3 \
-  CMD curl -fsS -m 8 -d '{"action":"block_count"}' \
-      "http://127.0.0.1:${RPC_PORT}" >/dev/null || exit 1
+  CMD /usr/local/bin/healthcheck.sh
 
 ENTRYPOINT ["/usr/local/bin/init.sh"]
