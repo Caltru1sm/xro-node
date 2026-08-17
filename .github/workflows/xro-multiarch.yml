@@ -199,14 +199,22 @@ jobs:
             ${{ env.IMAGE }}:${TAG}-arm64
           docker buildx imagetools inspect ${{ env.IMAGE }}:${TAG}
 
-      # Promotion is deliberate, never a side effect of tagging. Tagging a
-      # release builds and publishes that version; deciding it is what everyone
-      # gets by default is a separate call, made by re-running this workflow
-      # with latest=true once the build has actually run on hardware. The
-      # previous `startsWith(github.ref, 'refs/tags/')` clause promoted an
-      # untested build the moment a tag was pushed.
+      # :latest always points at the newest release, so an operator who pulls
+      # caltru1sm/xro-node:latest gets the current node on either architecture -
+      # the manifest above carries both, so there is no arm64-specific tag to
+      # find. Tagging a release is therefore the act of promoting it.
+      #
+      # Scoped to tag pushes rather than every run: workflow_dispatch defaults
+      # to the xro-dev tag and is how throwaway builds get made, and those must
+      # not become what the world pulls. A dispatch can still promote
+      # deliberately by passing latest=true.
+      #
+      # The consequence to be aware of: a tag push publishes to :latest before
+      # the build has run on real hardware. CI covers the binary, the baked
+      # identity, the preflight and the healthcheck, but not a live sync. Tag
+      # when you are ready for everyone to have it.
       - name: Move :latest
-        if: github.event.inputs.latest == 'true'
+        if: github.event.inputs.latest == 'true' || startsWith(github.ref, 'refs/tags/')
         run: |
           set -eux
           TAG=${{ steps.meta.outputs.tag }}
