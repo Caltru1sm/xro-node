@@ -168,9 +168,11 @@ from `config-rpc.toml` instead. Upgrade, or override the probe on the container.
 **Stuck at 156,000 blocks and not moving for over 30 minutes** — that shouldn't happen on
 2.0.3. Check `docker logs xro` for errors and say something in Discord.
 
-**Wrong genesis / no handshake** — check every `-e` value matches exactly. Those derive
-the genesis block; one wrong character puts you on a different network and peers will
-refuse you.
+**Wrong genesis / no handshake** — you're overriding the baked identity with `-e` values
+that don't match. Those derive the genesis block, and one wrong character puts you on a
+different network where peers refuse you. Drop the overrides and let the image's defaults
+stand. From 2.0.1 the node aborts at startup instead of running on the wrong genesis, so
+this should announce itself rather than look like a peering fault.
 
 ---
 
