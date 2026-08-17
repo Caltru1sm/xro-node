@@ -73,9 +73,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Git tags are named xro-node-2.0.3, so they read and sort as releases on
+      # GitHub. The image tag has to be the bare version - a node reports
+      # node_vendor from CI_TAG, and "Nano xro-node-2.0.0-R2" is what the old
+      # ref_name passthrough produced. Stripping the prefix means a tag-triggered
+      # release publishes under the same name a workflow_dispatch build would,
+      # instead of a parallel caltru1sm/xro-node:xro-node-2.0.3.
       - name: Resolve tag
         id: meta
-        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+        run: |
+          set -eu
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            tag="${{ github.event.inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME#xro-node-}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "resolved image tag: ${tag}"
 
       - name: Build and push ${{ matrix.suffix }}
         uses: docker/build-push-action@v6
@@ -156,9 +170,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Git tags are named xro-node-2.0.3, so they read and sort as releases on
+      # GitHub. The image tag has to be the bare version - a node reports
+      # node_vendor from CI_TAG, and "Nano xro-node-2.0.0-R2" is what the old
+      # ref_name passthrough produced. Stripping the prefix means a tag-triggered
+      # release publishes under the same name a workflow_dispatch build would,
+      # instead of a parallel caltru1sm/xro-node:xro-node-2.0.3.
       - name: Resolve tag
         id: meta
-        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+        run: |
+          set -eu
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            tag="${{ github.event.inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME#xro-node-}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "resolved image tag: ${tag}"
 
       # Per-architecture tags are pushed first and the manifest is created last,
       # so the tag production pulls is never in a half-updated state.
@@ -171,8 +199,14 @@ jobs:
             ${{ env.IMAGE }}:${TAG}-arm64
           docker buildx imagetools inspect ${{ env.IMAGE }}:${TAG}
 
+      # Promotion is deliberate, never a side effect of tagging. Tagging a
+      # release builds and publishes that version; deciding it is what everyone
+      # gets by default is a separate call, made by re-running this workflow
+      # with latest=true once the build has actually run on hardware. The
+      # previous `startsWith(github.ref, 'refs/tags/')` clause promoted an
+      # untested build the moment a tag was pushed.
       - name: Move :latest
-        if: github.event.inputs.latest == 'true' || startsWith(github.ref, 'refs/tags/')
+        if: github.event.inputs.latest == 'true'
         run: |
           set -eux
           TAG=${{ steps.meta.outputs.tag }}
