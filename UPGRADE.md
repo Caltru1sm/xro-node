@@ -3,8 +3,11 @@
 Keeps your existing ledger. No resync, no snapshot needed, nothing in your data
 directory is touched. Setting up a **new** node instead? See `DEPLOY.md`.
 
-**Current release: 2.0.0-R2.** New nodes sync from scratch in ~45 minutes (this was
-broken before R2), and node bandwidth is roughly 9x lower than 2.0.0.
+**Current release: 2.0.3.** New nodes sync from scratch in ~45 minutes (this was broken
+before 2.0.0-R2), and node bandwidth is roughly 9x lower than 2.0.0.
+
+The image is multi-architecture — the same tag works on x86, a Raspberry Pi 4/5 or CM5,
+an Oracle Ampere A1, or Graviton. Docker picks the right one on pull.
 
 ## 1. Pull the new image
 
@@ -62,13 +65,13 @@ Confirm you're on the new version:
 curl -d '{"action":"version"}' http://127.0.0.1:8076
 ```
 
-Should say `"node_vendor": "Nano xro-node-2.0.0-R2"`.
+Should say `"node_vendor": "Nano 2.0.3"`.
 
 ---
 
 ## If something goes wrong
 
-Roll back by running the same command with `caltru1sm/xro-node:2.0.0-R1` at the end
+Roll back by running the same command with `caltru1sm/xro-node:2.0.0-R2` at the end
 instead of `:latest`. Your ledger is untouched either way.
 
 **`name: unbound variable`** — you left out `-e name="RaiblocksOne"`. It's required now.
